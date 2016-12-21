@@ -3057,6 +3057,7 @@ send_block (HttpTxTask *task, Connection *conn, const char *block_id, guint32 *p
     if (!bmd) {
         seaf_warning ("Failed to stat block %s in repo %s.\n",
                       block_id, task->repo_id);
+        task->error = HTTP_TASK_ERR_BAD_LOCAL_DATA;
         return -1;
     }
 
@@ -3066,6 +3067,7 @@ send_block (HttpTxTask *task, Connection *conn, const char *block_id, guint32 *p
     if (!block) {
         seaf_warning ("Failed to open block %s in repo %s.\n",
                       block_id, task->repo_id);
+        task->error = HTTP_TASK_ERR_BAD_LOCAL_DATA;
         g_free (bmd);
         return -1;
     }
