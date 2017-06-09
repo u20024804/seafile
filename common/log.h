@@ -1,6 +1,8 @@
 #ifndef LOG_H
 #define LOG_H
 
+#include <stdio.h>
+
 #define SEAFILE_DOMAIN g_quark_from_string("seafile")
 
 #ifndef seaf_warning
@@ -15,6 +17,9 @@
 int seafile_log_init (const char *logfile, const char *ccnet_debug_level_str,
                       const char *seafile_debug_level_str);
 int seafile_log_reopen ();
+
+FILE *
+seafile_get_log_fp ();
 
 #ifndef WIN32
 #ifdef SEAFILE_SERVER

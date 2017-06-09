@@ -46,6 +46,8 @@
 
 #define RESET_BYTES_INTERVAL_MSEC 1000
 
+#define CLEAR_POOL_ERR_CNT 3
+
 #ifndef SEAFILE_CLIENT_VERSION
 #define SEAFILE_CLIENT_VERSION PACKAGE_VERSION
 #endif
@@ -77,6 +79,7 @@ struct _ConnectionPool {
     char *host;
     GQueue *queue;
     pthread_mutex_t lock;
+    int err_cnt;
 };
 typedef struct _ConnectionPool ConnectionPool;
 
@@ -197,6 +200,7 @@ connection_new ()
 static void
 connection_free (Connection *conn)
 {
+    seaf_message ("curl_easy_cleanup called.\n");
     curl_easy_cleanup (conn->curl);
     g_free (conn);
 }
@@ -233,6 +237,8 @@ connection_pool_get_connection (ConnectionPool *pool)
     Connection *conn = NULL;
 
     pthread_mutex_lock (&pool->lock);
+    seaf_message ("%u connections in connection pool %s. Error count %d.\n",
+                  g_queue_get_length (pool->queue), pool->host, pool->err_cnt);
     conn = g_queue_pop_head (pool->queue);
     if (!conn) {
         conn = connection_new ();
@@ -243,6 +249,21 @@ connection_pool_get_connection (ConnectionPool *pool)
 }
 
 static void
+connection_pool_clear (ConnectionPool *pool)
+{
+    Connection *conn = NULL;
+
+    seaf_message ("Clear connection pool %s.\n", pool->host);
+
+    while (1) {
+        conn = g_queue_pop_head (pool->queue);
+        if (!conn)
+            break;
+        connection_free (conn);
+    }
+}
+
+static void
 connection_pool_return_connection (ConnectionPool *pool, Connection *conn)
 {
     if (!conn)
@@ -250,12 +271,21 @@ connection_pool_return_connection (ConnectionPool *pool, Connection *conn)
 
     if (conn->release) {
         connection_free (conn);
+
+        pthread_mutex_lock (&pool->lock);
+        if (++pool->err_cnt >= CLEAR_POOL_ERR_CNT) {
+            connection_pool_clear (pool);
+        }
+        pthread_mutex_unlock (&pool->lock);
+
         return;
     }
 
     curl_easy_reset (conn->curl);
 
+    /* Reset error count when one connection succeeded. */
     pthread_mutex_lock (&pool->lock);
+    pool->err_cnt = 0;
     g_queue_push_tail (pool->queue, conn);
     pthread_mutex_unlock (&pool->lock);
 }
